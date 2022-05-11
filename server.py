@@ -1,8 +1,8 @@
-from sqlite3 import Cursor
-from flask import Flask, request
+from flask import Flask, request, abort
 import json
 from mock_data import mock_catalog
 from config import db
+from bson import ObjectId
 
 app = Flask("server")
 
@@ -22,7 +22,7 @@ def root ():
             "last": "Germino"
         }
 
-        return  json.dumps(me) # parse into json, then return
+        return json.dumps(me) # parse into json, then return
 
 @app.route("/api/catalog")
 def get_catalog():
@@ -79,11 +79,12 @@ def get_total():
 
 @app.route("/api/products/<id>")
 def find_product(id):
-    for prod in mock_catalog:
-        if id == prod["_id"]:
-            return json.dumps(prod)
+    prod = db.products.find_one({"_id": ObjectId(id) })
 
 
+    # for prod in mock_catalog:
+    #     if id == prod["_id"]:
+    #         return json.dumps(prod)
 
 
 
@@ -127,6 +128,55 @@ def search_by_text(text):
             results.append(prod)
 
     return json.dumps(results)
+
+
+@app.get("/api/couponCodes")
+def get_coupon_codes():
+    cursor = db.couponCodes.find({})
+    results = []
+    for coupon in cursor:
+        coupon["_id"] = str(coupon["_id"])
+        results.append(coupon)
+
+    return json.dumps(results)
+
+
+# @app.route("/api/couponCodes", methods=["post"])
+
+@app.get("/api/couponCodes/<code>")
+def get_by_code(code):
+    coupon = db.couponCodes.find_one({"code": code})
+    if not coupon:
+        return abort(401, "Invalid coupon code")
+
+    coupon["_id"] = str(coupon["_id"])
+    return json.dumps(coupon)
+
+
+
+
+@app.post("/api/couponCodes")
+def save_coupon():
+    coupon = request.get_json()
+
+    if not "code" in coupon or len(coupon["code"]) < 5:
+        return abort(400, "Code is required and should contain at least 5 characters")
+
+    if not "discount" in coupon or type(coupon["discount"]) != type(int) or type(coupon["discount"]) != type(float):
+        return abort(400, "Discount is required")
+
+    if coupon ["discount"] < 0 or coupon ["discount"] > 31:
+        return abort(400, "Discount should be between 0 and 31")
+
+
+    db.couponCodes.insert_one(coupon)
+    coupon["_id"] = str(coupon["_id"])
+
+    return json.dumps(coupon)
+
+
+
+
 
 app.run(debug=True)
 
